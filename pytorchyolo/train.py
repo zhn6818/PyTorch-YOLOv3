@@ -9,6 +9,8 @@ import tqdm
 import torch
 from torch.utils.data import DataLoader
 import torch.optim as optim
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pytorchyolo.models import load_model
 from pytorchyolo.utils.logger import Logger
