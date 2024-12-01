@@ -82,7 +82,7 @@ def run():
     if args.seed != -1:
         provide_determinism(args.seed)
 
-    logger = Logger(args.logdir)  # Tensorboard logger
+    logger = Logger(args.logdir)
 
     # Create output directories if missing
     os.makedirs("output", exist_ok=True)
@@ -93,13 +93,21 @@ def run():
     train_path = data_config["train"]
     valid_path = data_config["valid"]
     class_names = load_classes(data_config["names"])
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # ############
+    # 修改设备选择逻辑，支持 MPS
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("Using MPS (Apple Silicon) device")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+        print("Using CUDA device")
+    else:
+        device = torch.device("cpu")
+        print("Using CPU device")
+
     # Create model
-    # ############
-
     model = load_model(args.model, args.pretrained_weights)
+    model = model.to(device)
 
     # Print model
     if args.verbose:
@@ -159,8 +167,9 @@ def run():
         for batch_i, (_, imgs, targets) in enumerate(tqdm.tqdm(dataloader, desc=f"Training Epoch {epoch}")):
             batches_done = len(dataloader) * epoch + batch_i
 
-            imgs = imgs.to(device, non_blocking=True)
-            targets = targets.to(device)
+            # 确保数据类型为 float32
+            imgs = imgs.to(device, non_blocking=True).float()
+            targets = targets.to(device).float()
 
             outputs = model(imgs)
 
@@ -227,7 +236,9 @@ def run():
         if epoch % args.checkpoint_interval == 0:
             checkpoint_path = f"checkpoints/yolov3_ckpt_{epoch}.pth"
             print(f"---- Saving checkpoint to: '{checkpoint_path}' ----")
-            torch.save(model.state_dict(), checkpoint_path)
+            # 保存模型时确保在 CPU 上
+            torch.save(model.cpu().state_dict(), checkpoint_path)
+            model.to(device)  # 将模型移回设备
 
         # ########
         # Evaluate
