@@ -199,3 +199,14 @@ https://pjreddie.com/yolo/.
 ### YOEO — You Only Encode Once
 
 [YOEO](https://github.com/bit-bots/YOEO) extends this repo with the ability to train an additional semantic segmentation decoder. The lightweight example model is mainly targeted towards embedded real-time applications.
+
+## MLU 设备支持
+
+本项目现已支持寒武纪 MLU 设备。要在 MLU 上运行训练，请确保：
+
+1. 已安装 MLU 相关驱动和 SDK
+2. 已安装 torch_mlu 包：
+
+```bash
+pip install torch_
+```

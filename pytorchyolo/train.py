@@ -7,6 +7,7 @@ import argparse
 import tqdm
 
 import torch
+import torch_mlu
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import sys
@@ -90,12 +91,28 @@ def run():
 
     # Get data configuration
     data_config = parse_data_config(args.data)
-    train_path = data_config["train"]
-    valid_path = data_config["valid"]
+    
+    # 根据设备类型选择不同的数据集路径
+    if torch.backends.mps.is_available():
+        train_path = "data/coco/trainvalno5k.part"
+        valid_path = "data/coco/5k.part"
+        print("Using original dataset paths for MPS device")
+    else:
+        train_path = "data/coco/trainvalno5k_copy.part"
+        valid_path = "data/coco/5k_copy.part"
+        print("Using copy dataset paths for non-MPS device")
+    
+    # 使用新的路径覆盖配置文件中的路径
+    data_config["train"] = train_path
+    data_config["valid"] = valid_path
+    
     class_names = load_classes(data_config["names"])
 
-    # 修改设备选择逻辑，支持 MPS
-    if torch.backends.mps.is_available():
+    # 修改设备选择逻辑，支持 MLU
+    if torch.mlu.is_available():
+        device = torch.device("mlu")
+        print("Using MLU device")
+    elif torch.backends.mps.is_available():
         device = torch.device("mps")
         print("Using MPS (Apple Silicon) device")
     elif torch.cuda.is_available():
