@@ -210,3 +210,6 @@ https://pjreddie.com/yolo/.
 ```bash
 pip install torch_
 ```
+
+* nohup python pytorchyolo/train.py > train.log 2>&1 &
+* ps aux | grep train.py

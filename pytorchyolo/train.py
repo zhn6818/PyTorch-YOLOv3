@@ -7,7 +7,13 @@ import argparse
 import tqdm
 
 import torch
-import torch_mlu
+# 检查是否为寒武纪设备
+try:
+    import torch_mlu
+    HAS_MLU = True
+except ImportError:
+    HAS_MLU = False
+    
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import sys
@@ -63,7 +69,7 @@ def _create_data_loader(img_path, batch_size, img_size, n_cpu, multiscale_traini
 def run():
     print_environment_info()
     parser = argparse.ArgumentParser(description="Trains the YOLO model.")
-    parser.add_argument("-m", "--model", type=str, default="config/yolov3.cfg", help="Path to model definition file (.cfg)")
+    parser.add_argument("-m", "--model", type=str, default="config/yolov3-tiny.cfg", help="Path to model definition file (.cfg)")
     parser.add_argument("-d", "--data", type=str, default="config/coco.data", help="Path to data config file (.data)")
     parser.add_argument("-e", "--epochs", type=int, default=300, help="Number of epochs")
     parser.add_argument("-v", "--verbose", action='store_true', help="Makes the training more verbose")
@@ -108,19 +114,19 @@ def run():
     
     class_names = load_classes(data_config["names"])
 
-    # 修改设备选择逻辑，支持 MLU
-    if torch.mlu.is_available():
+    # 修改设备选择逻辑
+    if HAS_MLU and torch.mlu.is_available():
         device = torch.device("mlu")
-        print("Using MLU device")
+        print("使用寒武纪 MLU 设备")
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
-        print("Using MPS (Apple Silicon) device")
+        print("使用 Apple Silicon MPS 设备")
     elif torch.cuda.is_available():
         device = torch.device("cuda")
-        print("Using CUDA device")
+        print("使用 NVIDIA CUDA 设备")
     else:
         device = torch.device("cpu")
-        print("Using CPU device")
+        print("使用 CPU 设备")
 
     # Create model
     model = load_model(args.model, args.pretrained_weights)
@@ -264,6 +270,7 @@ def run():
         if epoch % args.evaluation_interval == 0:
             print("\n---- Evaluating Model ----")
             # Evaluate the model on the validation set
+            model = model.to(device)
             metrics_output = _evaluate(
                 model,
                 validation_dataloader,
@@ -272,7 +279,8 @@ def run():
                 iou_thres=args.iou_thres,
                 conf_thres=args.conf_thres,
                 nms_thres=args.nms_thres,
-                verbose=args.verbose
+                verbose=args.verbose,
+                device=device
             )
 
             if metrics_output is not None:

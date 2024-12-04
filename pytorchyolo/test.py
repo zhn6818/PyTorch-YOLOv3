@@ -76,7 +76,7 @@ def print_eval_stats(metrics_output, class_names, verbose):
         print("---- mAP not measured (no detections found by model) ----")
 
 
-def _evaluate(model, dataloader, class_names, img_size, iou_thres, conf_thres, nms_thres, verbose):
+def _evaluate(model, dataloader, class_names, img_size, iou_thres, conf_thres, nms_thres, verbose, device):
     """Evaluate model on validation dataset.
 
     :param model: Model to evaluate
@@ -105,16 +105,21 @@ def _evaluate(model, dataloader, class_names, img_size, iou_thres, conf_thres, n
     sample_metrics = []  # List of tuples (TP, confs, pred)
     for _, imgs, targets in tqdm.tqdm(dataloader, desc="Validating"):
         # Extract labels
+        
+        targets = targets.to(device)
         labels += targets[:, 1].tolist()
         # Rescale target
         targets[:, 2:] = xywh2xyxy(targets[:, 2:])
         targets[:, 2:] *= img_size
 
         imgs = Variable(imgs.type(Tensor), requires_grad=False)
+        imgs = imgs.to(device)
 
         with torch.no_grad():
             outputs = model(imgs)
-            outputs = non_max_suppression(outputs, conf_thres=conf_thres, iou_thres=nms_thres)
+            outputs = non_max_suppression(outputs, conf_thres=conf_thres, iou_thres=nms_thres, device=device)
+            # 将outputs转到device上
+            # outputs = [x.to(device) if x is not None else None for x in outputs]
 
         sample_metrics += get_batch_statistics(outputs, targets, iou_threshold=iou_thres)
 
@@ -123,8 +128,10 @@ def _evaluate(model, dataloader, class_names, img_size, iou_thres, conf_thres, n
         return None
 
     # Concatenate sample statistics
+    # 确保张量在CPU上进行连接操作
     true_positives, pred_scores, pred_labels = [
-        np.concatenate(x, 0) for x in list(zip(*sample_metrics))]
+        np.concatenate([x.cpu() if isinstance(x, torch.Tensor) else x for x in metric], 0) 
+        for metric in zip(*sample_metrics)]
     metrics_output = ap_per_class(
         true_positives, pred_scores, pred_labels, labels)
 
