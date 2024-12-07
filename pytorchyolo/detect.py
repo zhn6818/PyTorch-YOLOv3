@@ -14,7 +14,8 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pytorchyolo.models import load_model
 from pytorchyolo.utils.utils import load_classes, rescale_boxes, non_max_suppression, print_environment_info
 from pytorchyolo.utils.datasets import ImageFolder

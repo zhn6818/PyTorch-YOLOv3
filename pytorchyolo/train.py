@@ -69,7 +69,7 @@ def _create_data_loader(img_path, batch_size, img_size, n_cpu, multiscale_traini
 def run():
     print_environment_info()
     parser = argparse.ArgumentParser(description="Trains the YOLO model.")
-    parser.add_argument("-m", "--model", type=str, default="config/yolov3-tiny.cfg", help="Path to model definition file (.cfg)")
+    parser.add_argument("-m", "--model", type=str, default="config/yolov3.cfg", help="Path to model definition file (.cfg)")
     parser.add_argument("-d", "--data", type=str, default="config/coco.data", help="Path to data config file (.data)")
     parser.add_argument("-e", "--epochs", type=int, default=300, help="Number of epochs")
     parser.add_argument("-v", "--verbose", action='store_true', help="Makes the training more verbose")
@@ -116,7 +116,7 @@ def run():
 
     # 修改设备选择逻辑
     if HAS_MLU and torch.mlu.is_available():
-        device = torch.device("mlu")
+        device = torch.device("mlu:0")
         print("使用寒武纪 MLU 设备")
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
@@ -184,19 +184,27 @@ def run():
     for epoch in range(1, args.epochs+1):
 
         print("\n---- Training Model ----")
-
         model.train()  # Set model to training mode
 
-        for batch_i, (_, imgs, targets) in enumerate(tqdm.tqdm(dataloader, desc=f"Training Epoch {epoch}")):
+        # 创建进度条
+        pbar = tqdm.tqdm(dataloader, desc=f"Training Epoch {epoch}")
+        
+        for batch_i, (_, imgs, targets) in enumerate(pbar):
             batches_done = len(dataloader) * epoch + batch_i
 
-            # 确保数据类型为 float32
             imgs = imgs.to(device, non_blocking=True).float()
             targets = targets.to(device).float()
 
             outputs = model(imgs)
-
             loss, loss_components = compute_loss(outputs, targets, model)
+
+            # 更新进度条信息
+            pbar.set_postfix({
+                'iou_loss': f'{float(loss_components[0]):.4f}',
+                'obj_loss': f'{float(loss_components[1]):.4f}',
+                'cls_loss': f'{float(loss_components[2]):.4f}',
+                'total': f'{float(loss_components[3]):.4f}'
+            })
 
             loss.backward()
 

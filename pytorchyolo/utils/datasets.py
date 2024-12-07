@@ -8,6 +8,10 @@ import warnings
 import numpy as np
 from PIL import Image
 from PIL import ImageFile
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from PIL import Image, ImageDraw
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -138,8 +142,51 @@ class ListDataset(Dataset):
         for i, boxes in enumerate(bb_targets):
             boxes[:, 0] = i
         bb_targets = torch.cat(bb_targets, 0)
-
+        # self.visualize_batch(imgs, bb_targets, self.img_size)
+        
         return paths, imgs, bb_targets
+    
+    def visualize_batch(self, imgs, bb_targets, img_size):
+        """
+        可视化一批图像，并在图像上绘制边界框
+        :param imgs: 一个批次的图像（Tensor）
+        :param bb_targets: 边界框标签（Tensor, 格式为 [batch_idx, class_id, x_center, y_center, width, height]）
+        :param img_size: 图像尺寸，用于调整坐标
+        """
+        imgs = imgs.permute(0, 2, 3, 1).cpu().numpy()  # 将图像从 (B, C, H, W) 转为 (B, H, W, C)
+        bb_targets = bb_targets.cpu().numpy()         # 转为 NumPy 格式
+        
+        batch_size = imgs.shape[0]
+
+        for i in range(batch_size):
+            img = imgs[i] * 255.0  # 如果图像归一化了，乘以 255 恢复
+            img = img.astype(np.uint8)
+            img_pil = Image.fromarray(img)
+
+            draw = ImageDraw.Draw(img_pil)
+
+            # 获取当前图像的所有边界框
+            boxes = bb_targets[bb_targets[:, 0] == i]
+            for box in boxes:
+                _, class_id, x_center, y_center, width, height = box
+
+                # 将边界框中心坐标和宽高转换为左上角和右下角坐标
+                x1 = (x_center - width / 2) * img_size
+                y1 = (y_center - height / 2) * img_size
+                x2 = (x_center + width / 2) * img_size
+                y2 = (y_center + height / 2) * img_size
+
+                # 绘制边界框
+                draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
+
+                # 绘制类别 ID
+                draw.text((x1, y1), f"{int(class_id)}", fill="yellow")
+
+            # 显示图像
+            plt.figure(figsize=(6, 6))
+            plt.imshow(img_pil)
+            plt.axis("off")
+            plt.show()
 
     def __len__(self):
         return len(self.img_files)
