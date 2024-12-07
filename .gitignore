@@ -20,3 +20,4 @@ yolov3.weights
 darknet53.conv.74
 yolov3-tiny.weights
 train.log
+/backup_mnist

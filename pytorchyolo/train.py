@@ -73,7 +73,7 @@ def run():
     parser.add_argument("-d", "--data", type=str, default="config/coco.data", help="Path to data config file (.data)")
     parser.add_argument("-e", "--epochs", type=int, default=300, help="Number of epochs")
     parser.add_argument("-v", "--verbose", action='store_true', help="Makes the training more verbose")
-    parser.add_argument("--n_cpu", type=int, default=8, help="Number of cpu threads to use during batch generation")
+    parser.add_argument("--n_cpu", type=int, default=1, help="Number of cpu threads to use during batch generation")
     parser.add_argument("--pretrained_weights", type=str, help="Path to checkpoint file (.weights or .pth). Starts training from checkpoint model")
     parser.add_argument("--checkpoint_interval", type=int, default=1, help="Interval of epochs between saving model weights")
     parser.add_argument("--evaluation_interval", type=int, default=1, help="Interval of epochs between evaluations on validation set")
@@ -98,19 +98,21 @@ def run():
     # Get data configuration
     data_config = parse_data_config(args.data)
     
-    # 根据设备类型选择不同的数据集路径
-    if torch.backends.mps.is_available():
-        train_path = "data/coco/trainvalno5k.part"
-        valid_path = "data/coco/5k.part"
-        print("Using original dataset paths for MPS device")
-    else:
-        train_path = "data/coco/trainvalno5k_copy.part"
-        valid_path = "data/coco/5k_copy.part"
-        print("Using copy dataset paths for non-MPS device")
+    # # 根据设备类型选择不同的数据集路径
+    # if torch.backends.mps.is_available():
+    #     train_path = "data/coco/trainvalno5k.part"
+    #     valid_path = "data/coco/5k.part"
+    #     print("Using original dataset paths for MPS device")
+    # else:
+    #     train_path = "data/coco/trainvalno5k_copy.part"
+    #     valid_path = "data/coco/5k_copy.part"
+    #     print("Using copy dataset paths for non-MPS device")
     
     # 使用新的路径覆盖配置文件中的路径
-    data_config["train"] = train_path
-    data_config["valid"] = valid_path
+    train_path = data_config["train"]
+    valid_path = data_config["valid"]
+    # data_config["train"] = data_config.train
+    # data_config["valid"] = data_config.valid
     
     class_names = load_classes(data_config["names"])
 
@@ -265,11 +267,48 @@ def run():
 
         # Save model to checkpoint file
         if epoch % args.checkpoint_interval == 0:
-            checkpoint_path = f"checkpoints/yolov3_ckpt_{epoch}.pth"
+            # 获取当前的平均loss值
+            avg_iou_loss = float(loss_components[0])
+            avg_obj_loss = float(loss_components[1])
+            avg_cls_loss = float(loss_components[2])
+            avg_total_loss = float(loss_components[3])
+            
+            # 创建backup目录（如果不存在）
+            backup_dir = data_config.get("backup", "checkpoints")  # 如果配置文件中没有指定backup，则使用默认的checkpoints目录
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            # 使用loss值构建文件名
+            checkpoint_name = (f"yolov3_ckpt_epoch_{epoch}"
+                             f"_iou_{avg_iou_loss:.4f}"
+                             f"_obj_{avg_obj_loss:.4f}"
+                             f"_cls_{avg_cls_loss:.4f}"
+                             f"_total_{avg_total_loss:.4f}.pth")
+            
+            checkpoint_path = os.path.join(backup_dir, checkpoint_name)
             print(f"---- Saving checkpoint to: '{checkpoint_path}' ----")
-            # 保存模型时确保在 CPU 上
-            torch.save(model.cpu().state_dict(), checkpoint_path)
+            
+            # 保存模型时确保在CPU上
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.cpu().state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': {
+                    'iou_loss': avg_iou_loss,
+                    'obj_loss': avg_obj_loss,
+                    'cls_loss': avg_cls_loss,
+                    'total_loss': avg_total_loss
+                }
+            }
+            
+            torch.save(checkpoint, checkpoint_path)
             model.to(device)  # 将模型移回设备
+            
+            # 打印保存信息
+            print(f"Checkpoint saved with losses:")
+            print(f"IoU Loss: {avg_iou_loss:.4f}")
+            print(f"Object Loss: {avg_obj_loss:.4f}")
+            print(f"Class Loss: {avg_cls_loss:.4f}")
+            print(f"Total Loss: {avg_total_loss:.4f}")
 
         # ########
         # Evaluate
